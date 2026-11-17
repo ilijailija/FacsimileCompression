@@ -8,70 +8,77 @@ Huffman::Huffman() {
 }
 
 HuffmanCode Huffman::GetHuffmanCode(int lenght, bool isBlack) {
-    int blackOffsetMakeup = 0, blackOffset = 0;
-    if (isBlack) {
-        blackOffset = 64;
-        blackOffsetMakeup = 40;
+    int blackOffset = isBlack ? 64 : 0;
+    int blackOffsetMakeup = isBlack ? 40 : 0;
+
+    HuffmanCode combinedCode;
+    combinedCode.bits = "";
+
+
+    while (lenght > 2623) {
+        combinedCode.bits += makeupCodes.at(39).bits; // 2560
+        lenght -= 2560;
     }
-	if (lenght < 64)
-		return terminationCodes.at(lenght + blackOffset);
-	else {
-		int terminationLenght = lenght % 64;
-		int makeUpLenght = (int)lenght/64 - 1;
 
-        if (terminationLenght == 0) { // ako je proizvod broja 64 dodaje se terminacioni kod za 0
-            HuffmanCode terminationCode = terminationCodes.at(0);
-            HuffmanCode makeUpCode = makeupCodes.at(makeUpLenght + blackOffsetMakeup);
+    if (lenght >= 64) {
+        int makeUpIndex = lenght / 64 - 1;
+        if (isBlack && makeUpIndex < 27)
+            makeUpIndex += blackOffsetMakeup;
+        combinedCode.bits += makeupCodes.at(makeUpIndex).bits;
+    }
+    combinedCode.bits += terminationCodes.at(lenght % 64 + blackOffset).bits;
 
-            HuffmanCode combinedCode;
-
-            combinedCode.bits = makeUpCode.bits + terminationCode.bits;
-            combinedCode.lenght = terminationLenght + makeUpLenght;
-            return combinedCode;
-        }
-
-		HuffmanCode terminationCode = terminationCodes.at(terminationLenght + blackOffset);
-		HuffmanCode makeUpCode = makeupCodes.at(makeUpLenght + blackOffsetMakeup);
-
-		HuffmanCode combinedCode;
-
-		combinedCode.bits = makeUpCode.bits + terminationCode.bits;
-		combinedCode.lenght = terminationLenght + makeUpLenght;
-		return combinedCode;
-	}
+    combinedCode.lenght = static_cast<int>(combinedCode.bits.size()); // ukupan broj bitova
+    return combinedCode;
 }
 bool Huffman::ProcessEncodedImage(vector<vector<pair<int, int>>> endImg, const string& filename)
 {
-    HuffmanCode str;
     ofstream os(filename, ios::out | ios::binary);
 
     if (!os) {
         cout << "Neuspesno otvaranje output fajla." << endl;
         return false;
     }
+
+    unsigned char buffer = 0; // bajt koji se trenutno puni
+    int bitCount = 0;         // koliko je bitova vec upisano u buffer (0-7)
+
+    // upisuje string od '0' i '1' karaktera kao prave bitove, bajt po bajt
+    auto writeBits = [&](const string& bits) {
+        for (char c : bits) {
+            buffer = (buffer << 1) | (c == '1' ? 1 : 0);
+            if (++bitCount == 8) {
+                os.put(static_cast<char>(buffer));
+                buffer = 0;
+                bitCount = 0;
+            }
+        }
+        };
+
     size_t size = endImg.size();
-    string eol = "000000000001";
+    const string eol = "000000000001";
 
-    os.write(eol.c_str(), eol.size()); // prvi eol na stranici
+    writeBits(eol); // prvi eol na stranici
 
-    for (int i = 0; i < size; i++){
-       
-        
-        if (endImg[i][0].second == 1) { // ako je prvi niz crn dodaje se 1 beli piksel ispred
-            string whitePixel = terminationCodes[1].bits;
-            os.write(whitePixel.c_str(), whitePixel.size());
+    for (size_t i = 0; i < size; i++) {
+        if (endImg[i][0].second == 1) { // red mora poceti belim nizom; ako je prvi niz crn, beli niz je duzine 0
+            writeBits(terminationCodes[0].bits);
         }
-        else {
-            endImg[i][0].first += 1; // ako je prvi niz beo, duzina mu se povecava za 1
+        for (size_t j = 0; j < endImg[i].size(); j++) {
+            HuffmanCode str = GetHuffmanCode(endImg[i][j].first, endImg[i][j].second);
+            writeBits(str.bits);
         }
-        for (int j = 0; j < endImg[i].size(); j++) {
-            str = GetHuffmanCode(endImg[i][j].first, endImg[i][j].second);
-            os.write(str.bits.c_str(), str.bits.size());
-        }
-        os.write(eol.c_str(), eol.size());;// eol na kraju svake linije
+        writeBits(eol); // eol na kraju svake linije
     }
-    for(int i = 0;i<6;i++)
-        os.write(eol.c_str(), eol.size()); // 6 eol-a na kraju stranice
+    for (int i = 0; i < 6; i++)
+        writeBits(eol); // 6 eol-a na kraju stranice
+
+    // poslednji nepopunjen bajt se dopunjuje nulama zdesna i upisuje
+    if (bitCount > 0) {
+        buffer <<= (8 - bitCount);
+        os.put(static_cast<char>(buffer));
+    }
+
     os.close();
     return true;
 }
@@ -195,7 +202,7 @@ void Huffman::InitializeHuffmanCodes()
     terminationCodes[113] = { "000001100101", 12 }; // 49 crnih piksela
     terminationCodes[114] = { "000001010010", 12 }; // 50 crnih piksela
     terminationCodes[115] = { "000001010011", 12 }; // 51 crnih piksela
-    terminationCodes[116] = { "000000110111", 12 }; // 52 crnih piksela
+    terminationCodes[116] = { "000000100100", 12 }; // 52 crnih piksela
     terminationCodes[117] = { "000000110111", 12 }; // 53 crnih piksela
     terminationCodes[118] = { "000000111000", 12 }; // 54 crnih piksela
     terminationCodes[119] = { "000000100111", 12 }; // 55 crnih piksela
